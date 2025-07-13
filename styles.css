@@ -105,6 +105,19 @@ h1 {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
 }
 
+.display-toggle {
+    top: 70px; /* Position below the view toggle */
+}
+
+.display-icon {
+    color: #9CA3AF;
+    transition: all 0.3s ease;
+}
+
+.display-icon.active {
+    color: #667eea;
+}
+
 #circles-svg {
     border-radius: 10px;
 }

@@ -31,6 +31,7 @@ class CommunityVisualization {
         this.centerY = this.height / 2;
         this.outsiderRadius = OUTSIDER_RADIUS; // Area outside all rings for outsiders
         this.isLinearView = false;
+        this.showPhotos = true; // true = photos, false = colored dots
         
         this.setupSVG();
         this.setupTooltip();
@@ -50,11 +51,18 @@ class CommunityVisualization {
     }
     
     setupToggle() {
-        // Make entire toggle container clickable
-        d3.select(".toggle-container").on("click", () => {
+        // View toggle (circle/linear)
+        d3.select(".toggle-container:not(.display-toggle)").on("click", () => {
             this.isLinearView = !this.isLinearView;
             this.updateToggleState();
             this.transitionToView();
+        });
+        
+        // Display toggle (photos/dots)
+        d3.select(".display-toggle").on("click", () => {
+            this.showPhotos = !this.showPhotos;
+            this.updateToggleState();
+            this.renderVisualization(); // Re-render with new display mode
         });
         
         // Initialize toggle state
@@ -62,20 +70,34 @@ class CommunityVisualization {
     }
     
     updateToggleState() {
-        const toggleSwitch = d3.select("#view-toggle");
+        // View toggle state
+        const viewToggleSwitch = d3.select("#view-toggle");
         const circleIcon = d3.select(".circle-icon");
         const lineIcon = d3.select(".line-icon");
         
         if (this.isLinearView) {
-            // Linear view active
-            toggleSwitch.classed("active", true);
+            viewToggleSwitch.classed("active", true);
             circleIcon.classed("active", false);
             lineIcon.classed("active", true);
         } else {
-            // Circular view active
-            toggleSwitch.classed("active", false);
+            viewToggleSwitch.classed("active", false);
             circleIcon.classed("active", true);
             lineIcon.classed("active", false);
+        }
+        
+        // Display toggle state
+        const displayToggleSwitch = d3.select("#display-toggle");
+        const photoIcon = d3.select(".photo-icon");
+        const dotIcon = d3.select(".dot-icon");
+        
+        if (this.showPhotos) {
+            displayToggleSwitch.classed("active", false);
+            photoIcon.classed("active", true);
+            dotIcon.classed("active", false);
+        } else {
+            displayToggleSwitch.classed("active", true);
+            photoIcon.classed("active", false);
+            dotIcon.classed("active", true);
         }
     }
     
@@ -244,48 +266,54 @@ class CommunityVisualization {
             .on("mouseout", () => this.hideTooltip())
             .on("click", (event, d) => this.showEmployeeInfo(d));
             
-        // Create a shared defs section for all photo patterns
-        const defs = this.svg.select("defs").empty() ? this.svg.append("defs") : this.svg.select("defs");
-        
-        // Add profile photos for employees who have them using a simpler approach
-        employeeGroups.filter(d => d.photo_url).each(function(d) {
-            const group = d3.select(this);
-            const radius = 24; // Fixed radius value
-            const patternId = `photo-${d.employee_id}`;
+        if (this.showPhotos) {
+            // Photo mode: show photos and initials as before
+            const defs = this.svg.select("defs").empty() ? this.svg.append("defs") : this.svg.select("defs");
             
-            // Create pattern
-            const pattern = defs.append("pattern")
-                .attr("id", patternId)
-                .attr("patternUnits", "userSpaceOnUse")
-                .attr("width", radius * 2)
-                .attr("height", radius * 2)
-                .attr("x", -radius)
-                .attr("y", -radius);
+            // Add profile photos for employees who have them
+            employeeGroups.filter(d => d.photo_url).each(function(d) {
+                const group = d3.select(this);
+                const radius = 24; // Fixed radius value
+                const patternId = `photo-${d.employee_id}`;
                 
-            pattern.append("image")
-                .attr("href", d.photo_url)
-                .attr("width", radius * 2)
-                .attr("height", radius * 2)
-                .attr("preserveAspectRatio", "xMidYMid slice");
+                // Create pattern
+                const pattern = defs.append("pattern")
+                    .attr("id", patternId)
+                    .attr("patternUnits", "userSpaceOnUse")
+                    .attr("width", radius * 2)
+                    .attr("height", radius * 2)
+                    .attr("x", -radius)
+                    .attr("y", -radius);
+                    
+                pattern.append("image")
+                    .attr("href", d.photo_url)
+                    .attr("width", radius * 2)
+                    .attr("height", radius * 2)
+                    .attr("preserveAspectRatio", "xMidYMid slice");
+                    
+                // Apply pattern to the circle
+                group.select(".employee-dot")
+                    .style("fill", `url(#${patternId})`);
+            });
                 
-            // Apply pattern to the circle
-            group.select(".employee-dot")
-                .style("fill", `url(#${patternId})`);
-        });
-            
-        // Add employee initials for those without photos
-        employeeGroups.filter(d => !d.photo_url)
-            .append("text")
-            .attr("x", 0)
-            .attr("y", 0)
-            .attr("text-anchor", "middle")
-            .attr("dominant-baseline", "central")
-            .style("font-size", "14px")
-            .style("font-weight", "bold")
-            .style("fill", d => this.getEmployeeColor(d))
-            .style("pointer-events", "none")
-            .style("user-select", "none")
-            .text(d => this.getInitials(d.name));
+            // Add employee initials for those without photos
+            employeeGroups.filter(d => !d.photo_url)
+                .append("text")
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "central")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .style("fill", d => this.getEmployeeColor(d))
+                .style("pointer-events", "none")
+                .style("user-select", "none")
+                .text(d => this.getInitials(d.name));
+        } else {
+            // Dot mode: just show colored dots
+            employeeGroups.select(".employee-dot")
+                .style("fill", d => this.getEmployeeColor(d));
+        }
     }
     
     getEmployeePosition(employee) {
@@ -453,7 +481,11 @@ class CommunityVisualization {
     }
     
     getEmployeeRadius() {
-        return 24; // Double the size for better photo visibility
+        if (this.showPhotos) {
+            return 24; // Large size for photos
+        } else {
+            return 6; // Small dots
+        }
     }
     
     getEmployeeColor(employee) {
