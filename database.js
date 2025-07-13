@@ -105,6 +105,9 @@ class EmployeeDatabase {
                 name: `${firstName} ${lastName}`,
                 tenure: Math.round((Math.random() * 8 + 0.1) * 10) / 10, // 0.1 to 8.1 years
                 engagement_level: aiEngagementLevel,
+                // Profile photo - most employees have photos, some use initials
+                // Using Pravatar with seed for consistent, professional-looking avatars
+                photo_url: Math.random() < 0.85 ? `https://i.pravatar.cc/150?u=${i + 1000}` : null,
                 // AI usage tracking fields
                 ...aiUsageData
             });
@@ -225,6 +228,24 @@ class EmployeeDatabase {
         }
         
         return selectedTools;
+    }
+
+    getUnsplashPhotoId(index) {
+        // Curated list of professional headshot photo IDs from Unsplash
+        const professionalHeadshots = [
+            '1494790108792-7ac1b5159e9f', '1507003211169-0a1dd7d74dd2', '1573496359142-b8d87734a5a2',
+            '1580518337805-c4de86d2d2a9', '1519085360753-af0119f7c3be', '1558929996-06cfaa2b1a37',
+            '1472099645785-5658abf4ff4e', '1522228115-236c02d6d712', '1500648767791-00dcc994a43e',
+            '1534528741775-53994a69daeb', '1507591064344-4c6ce005b128', '1488161628813-04466f872be2',
+            '1618835962148-9cc84c5b3b20', '1519244703995-f4e0f30006d5', '1438761681033-6461ffad8d80',
+            '1601412436009-d964bd02edbc', '1611689342806-7e8e2b2cde00', '1581382575275-97901c2635b7',
+            '1507003211169-0a1dd7d74dd2', '1573496359142-b8d87734a5a2', '1566492031773-4f4e44671d66',
+            '1595152452543-e5fc28ebc2b8', '1607990281513-2c110a25bd8c', '1606814893907-d2720f9c3b65',
+            '1502823403499-6ccfcf4fb453', '1539571696947-80d1ce3ecbf7', '1560250097-0b93528c311a',
+            '1569913486515-b74bf7751574', '1528892952291-009c663ce843', '1573497019940-1c28c88b4f3e'
+        ];
+        
+        return professionalHeadshots[index % professionalHeadshots.length];
     }
 
     calculateAIEngagementLevel(aiUsageData) {

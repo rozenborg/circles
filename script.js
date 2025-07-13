@@ -2,21 +2,34 @@
 const employeeDB = new EmployeeDatabase();
 const employees = employeeDB.getAllEmployees();
 
+// How wide is one dial step? = 2/3rds of the inner circle diameter
+const INNER_RADIUS = 70;          // Pro radius (fits better in 900x900 canvas)
+const DIAL = (INNER_RADIUS * 2) * (2/3);  // 93.33 px (2/3rds of inner diameter)
+
+// Radii grow by one DIAL each time
 const circleConfig = {
-    pro: { radius: 80, color: "#6366F1", label: "Pro" },
-    practitioner: { radius: 140, color: "#06B6D4", label: "Practitioner" },
-    explorer: { radius: 200, color: "#22C55E", label: "Explorer" },
-    newcomer: { radius: 260, color: "#EAB308", label: "Newcomer" }
+    pro:          { radius: INNER_RADIUS,            color: "#6366F1", label: "Pro" },
+    practitioner: { radius: INNER_RADIUS + 1*DIAL,   color: "#06B6D4", label: "Practitioner" },
+    explorer:     { radius: INNER_RADIUS + 2*DIAL,   color: "#22C55E", label: "Explorer" },
+    newcomer:     { radius: INNER_RADIUS + 3*DIAL,   color: "#EAB308", label: "Newcomer" }
 };
+
+const OUTSIDER_RADIUS = INNER_RADIUS + 3*DIAL + 40; // perfect distance from newcomer ring
+
+function getRingArray() {
+    // order from outermost to innermost for proper layering
+    return ['newcomer','explorer','practitioner','pro']
+        .map(k => ({level: k, ...circleConfig[k]}));
+}
 
 class CommunityVisualization {
     constructor(containerId) {
         this.container = d3.select(containerId);
-        this.width = 800;
-        this.height = 800;
+        this.width = 900;
+        this.height = 900;
         this.centerX = this.width / 2;
         this.centerY = this.height / 2;
-        this.outsiderRadius = 320; // Area outside all rings for outsiders
+        this.outsiderRadius = OUTSIDER_RADIUS; // Area outside all rings for outsiders
         this.isLinearView = false;
         
         this.setupSVG();
@@ -85,7 +98,7 @@ class CommunityVisualization {
     drawLinearView() {
         const sections = ['Outsider', 'Newcomer', 'Explorer', 'Practitioner', 'Pro'];
         const sectionWidth = this.width / 5;
-        const baseY = this.height - 100;
+        const baseY = this.height - 120;
         
         // Draw horizontal line
         this.svg.append("line")
@@ -177,15 +190,7 @@ class CommunityVisualization {
     }
     
     drawCircleRings() {
-        // Draw rings from outside to inside for proper layering
-        const rings = [
-            { level: 'newcomer', radius: 260, color: '#EAB308' },  // Yellow outer ring
-            { level: 'explorer', radius: 200, color: '#22C55E' },   // Green middle ring  
-            { level: 'practitioner', radius: 140, color: '#06B6D4' }, // Cyan inner ring
-            { level: 'pro', radius: 80, color: '#6366F1' }         // Purple innermost ring
-        ];
-        
-        rings.forEach(ring => {
+        getRingArray().forEach(ring => {
             this.svg.append("circle")
                 .attr("class", "circle-ring")
                 .attr("cx", this.centerX)
@@ -239,13 +244,43 @@ class CommunityVisualization {
             .on("mouseout", () => this.hideTooltip())
             .on("click", (event, d) => this.showEmployeeInfo(d));
             
-        // Add employee initials perfectly centered in the bubble
-        employeeGroups.append("text")
+        // Create a shared defs section for all photo patterns
+        const defs = this.svg.select("defs").empty() ? this.svg.append("defs") : this.svg.select("defs");
+        
+        // Add profile photos for employees who have them using a simpler approach
+        employeeGroups.filter(d => d.photo_url).each(function(d) {
+            const group = d3.select(this);
+            const radius = 24; // Fixed radius value
+            const patternId = `photo-${d.employee_id}`;
+            
+            // Create pattern
+            const pattern = defs.append("pattern")
+                .attr("id", patternId)
+                .attr("patternUnits", "userSpaceOnUse")
+                .attr("width", radius * 2)
+                .attr("height", radius * 2)
+                .attr("x", -radius)
+                .attr("y", -radius);
+                
+            pattern.append("image")
+                .attr("href", d.photo_url)
+                .attr("width", radius * 2)
+                .attr("height", radius * 2)
+                .attr("preserveAspectRatio", "xMidYMid slice");
+                
+            // Apply pattern to the circle
+            group.select(".employee-dot")
+                .style("fill", `url(#${patternId})`);
+        });
+            
+        // Add employee initials for those without photos
+        employeeGroups.filter(d => !d.photo_url)
+            .append("text")
             .attr("x", 0)
             .attr("y", 0)
             .attr("text-anchor", "middle")
             .attr("dominant-baseline", "central")
-            .style("font-size", "10px")
+            .style("font-size", "14px")
             .style("font-weight", "bold")
             .style("fill", d => this.getEmployeeColor(d))
             .style("pointer-events", "none")
@@ -266,7 +301,7 @@ class CommunityVisualization {
         const edgeSections = ['edge_of_newcomer', 'edge_of_explorer', 'edge_of_practitioner', 'edge_of_pro'];
         
         const sectionWidth = this.width / 5; // Divide into 5 sections
-        const baseY = this.height - 100; // Bottom line position
+        const baseY = this.height - 120; // Bottom line position
         
         let sectionIndex, x, levelEmployees, employeeIndex, stackHeight;
         
@@ -417,8 +452,8 @@ class CommunityVisualization {
         return { x, y };
     }
     
-    getEmployeeRadius(employee) {
-        return 12; // Standard size with padding for letters
+    getEmployeeRadius() {
+        return 24; // Double the size for better photo visibility
     }
     
     getEmployeeColor(employee) {
