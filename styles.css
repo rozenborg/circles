@@ -118,6 +118,19 @@ h1 {
     color: #667eea;
 }
 
+.ring-toggle {
+    top: 120px; /* Position below the display toggle */
+}
+
+.ring-icon {
+    color: #9CA3AF;
+    transition: all 0.3s ease;
+}
+
+.ring-icon.active {
+    color: #667eea;
+}
+
 #circles-svg {
     border-radius: 10px;
 }

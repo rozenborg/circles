@@ -192,8 +192,6 @@ class EmployeeDatabase {
             consecutive_weeks_used: Math.floor(Math.random() * 8), // 0-7 weeks
             is_in_practitioner_program: Math.random() < 0.15,
             is_practitioner_certified: Math.random() < 0.10,
-            is_in_pro_program: Math.random() < 0.08,
-            is_pro_certified: Math.random() < 0.03,
             ai_tools_used: this.generateAIToolsList()
         };
     }
@@ -253,8 +251,6 @@ class EmployeeDatabase {
         const fourWeeksAgo = new Date(today.getTime() - (4 * 7 * 24 * 60 * 60 * 1000));
         
         // Check certification status first (highest priority)
-        if (aiUsageData.is_pro_certified) return 'pro';
-        if (aiUsageData.is_in_pro_program) return 'edge_of_pro';
         if (aiUsageData.is_practitioner_certified) return 'practitioner';
         if (aiUsageData.is_in_practitioner_program) return 'edge_of_practitioner';
         
