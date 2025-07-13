@@ -1,0 +1,501 @@
+// Initialize the employee database
+const employeeDB = new EmployeeDatabase();
+const employees = employeeDB.getAllEmployees();
+
+const circleConfig = {
+    pro: { radius: 80, color: "#6366F1", label: "Pro" },
+    practitioner: { radius: 140, color: "#06B6D4", label: "Practitioner" },
+    explorer: { radius: 200, color: "#22C55E", label: "Explorer" },
+    newcomer: { radius: 260, color: "#EAB308", label: "Newcomer" }
+};
+
+class CommunityVisualization {
+    constructor(containerId) {
+        this.container = d3.select(containerId);
+        this.width = 800;
+        this.height = 800;
+        this.centerX = this.width / 2;
+        this.centerY = this.height / 2;
+        this.outsiderRadius = 320; // Area outside all rings for outsiders
+        this.isLinearView = false;
+        
+        this.setupSVG();
+        this.setupTooltip();
+        this.setupToggle();
+        this.renderVisualization();
+    }
+    
+    setupSVG() {
+        this.svg = this.container
+            .attr("width", this.width)
+            .attr("height", this.height);
+    }
+    
+    setupTooltip() {
+        this.tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip");
+    }
+    
+    setupToggle() {
+        // Make entire toggle container clickable
+        d3.select(".toggle-container").on("click", () => {
+            this.isLinearView = !this.isLinearView;
+            this.updateToggleState();
+            this.transitionToView();
+        });
+        
+        // Initialize toggle state
+        this.updateToggleState();
+    }
+    
+    updateToggleState() {
+        const toggleSwitch = d3.select("#view-toggle");
+        const circleIcon = d3.select(".circle-icon");
+        const lineIcon = d3.select(".line-icon");
+        
+        if (this.isLinearView) {
+            // Linear view active
+            toggleSwitch.classed("active", true);
+            circleIcon.classed("active", false);
+            lineIcon.classed("active", true);
+        } else {
+            // Circular view active
+            toggleSwitch.classed("active", false);
+            circleIcon.classed("active", true);
+            lineIcon.classed("active", false);
+        }
+    }
+    
+    renderVisualization() {
+        this.svg.selectAll("*").remove(); // Clear previous render
+        this.drawBackground();
+        this.drawEmployees();
+    }
+    
+    drawBackground() {
+        // Only draw the background appropriate for current view
+        if (this.isLinearView) {
+            this.drawLinearView();
+        } else {
+            this.drawCircleRings();
+            this.drawCircleLabels();
+        }
+    }
+    
+    drawLinearView() {
+        const sections = ['Outsider', 'Newcomer', 'Explorer', 'Practitioner', 'Pro'];
+        const sectionWidth = this.width / 5;
+        const baseY = this.height - 100;
+        
+        // Draw horizontal line
+        this.svg.append("line")
+            .attr("class", "linear-line")
+            .attr("x1", 0)
+            .attr("y1", baseY)
+            .attr("x2", this.width)
+            .attr("y2", baseY)
+            .attr("stroke", "#4a5568")
+            .attr("stroke-width", 3);
+            
+        // Draw section dividers and labels
+        sections.forEach((section, i) => {
+            const x = sectionWidth * i + sectionWidth / 2;
+            
+            // Section divider
+            if (i > 0) {
+                this.svg.append("line")
+                    .attr("class", "linear-line")
+                    .attr("x1", sectionWidth * i)
+                    .attr("y1", baseY - 20)
+                    .attr("x2", sectionWidth * i)
+                    .attr("y2", baseY + 20)
+                    .attr("stroke", "#9CA3AF")
+                    .attr("stroke-width", 2);
+            }
+            
+            // Section label
+            this.svg.append("text")
+                .attr("class", "section-label")
+                .attr("x", x)
+                .attr("y", baseY + 40)
+                .attr("text-anchor", "middle")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .style("fill", "#4a5568")
+                .text(section);
+        });
+    }
+    
+    transitionToView() {
+        const duration = 800;
+        
+        // Step 1: Immediately remove ALL background elements (ensure clean slate)
+        this.svg.selectAll(".circle-ring, .circle-label, .section-label, .linear-line").remove();
+        
+        // Step 2: Calculate new positions
+        employees.forEach(employee => {
+            const newPosition = this.getEmployeePosition(employee);
+            employee.x = newPosition.x;
+            employee.y = newPosition.y;
+        });
+        
+        // Step 3: Animate only the group transforms - children stay in place relative to group
+        this.svg.selectAll(".employee")
+            .transition()
+            .duration(duration)
+            .ease(d3.easeLinear)
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+        
+        // Step 4: After a short delay, redraw background elements
+        setTimeout(() => {
+            // Draw the correct background for current view
+            if (this.isLinearView) {
+                this.drawLinearView();
+            } else {
+                this.drawCircleRings();
+                this.drawCircleLabels();
+            }
+            
+            // Ensure employees stay on top by moving them to end of DOM
+            this.svg.selectAll(".employee").each(function() {
+                this.parentNode.appendChild(this);
+            });
+            
+            // Fade in the newly drawn background elements with proper opacity
+            this.svg.selectAll(".circle-ring")
+                .style("opacity", 0)
+                .transition()
+                .duration(duration / 3)
+                .style("opacity", 0.3);
+                
+            this.svg.selectAll(".circle-label, .section-label, .linear-line")
+                .style("opacity", 0)
+                .transition()
+                .duration(duration / 3)
+                .style("opacity", 1);
+        }, duration / 4);
+    }
+    
+    drawCircleRings() {
+        // Draw rings from outside to inside for proper layering
+        const rings = [
+            { level: 'newcomer', radius: 260, color: '#EAB308' },  // Yellow outer ring
+            { level: 'explorer', radius: 200, color: '#22C55E' },   // Green middle ring  
+            { level: 'practitioner', radius: 140, color: '#06B6D4' }, // Cyan inner ring
+            { level: 'pro', radius: 80, color: '#6366F1' }         // Purple innermost ring
+        ];
+        
+        rings.forEach(ring => {
+            this.svg.append("circle")
+                .attr("class", "circle-ring")
+                .attr("cx", this.centerX)
+                .attr("cy", this.centerY)
+                .attr("r", ring.radius)
+                .style("fill", ring.color)
+                .style("stroke", "none")
+                .style("opacity", 0.3)
+                .style("pointer-events", "none"); // Ensure rings don't interfere with employee interactions
+        });
+    }
+    
+    drawCircleLabels() {
+        Object.entries(circleConfig).forEach(([level, config]) => {
+            this.svg.append("text")
+                .attr("class", "circle-label")
+                .attr("x", this.centerX)
+                .attr("y", this.centerY - config.radius + 20)
+                .text(config.label)
+                .style("fill", "white")
+                .style("font-weight", "bold");
+        });
+    }
+    
+    drawEmployees() {
+        // Position employees based on their engagement level
+        employees.forEach((employee, index) => {
+            const position = this.getEmployeePosition(employee);
+            employee.x = position.x;
+            employee.y = position.y;
+        });
+
+        const employeeGroups = this.svg.selectAll(".employee")
+            .data(employees, d => d.employee_id)
+            .enter()
+            .append("g")
+            .attr("class", "employee")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+            
+        // Draw employee dots at origin (0,0) of each group
+        employeeGroups.append("circle")
+            .attr("class", "employee-dot")
+            .attr("cx", 0)
+            .attr("cy", 0)
+            .attr("r", d => this.getEmployeeRadius(d))
+            .style("fill", "white")
+            .style("stroke", d => this.getEmployeeColor(d))
+            .style("stroke-width", 2)
+            .style("opacity", 0.9)
+            .on("mouseover", (event, d) => this.showTooltip(event, d))
+            .on("mouseout", () => this.hideTooltip())
+            .on("click", (event, d) => this.showEmployeeInfo(d));
+            
+        // Add employee initials perfectly centered in the bubble
+        employeeGroups.append("text")
+            .attr("x", 0)
+            .attr("y", 0)
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "central")
+            .style("font-size", "10px")
+            .style("font-weight", "bold")
+            .style("fill", d => this.getEmployeeColor(d))
+            .style("pointer-events", "none")
+            .style("user-select", "none")
+            .text(d => this.getInitials(d.name));
+    }
+    
+    getEmployeePosition(employee) {
+        if (this.isLinearView) {
+            return this.getLinearPosition(employee);
+        } else {
+            return this.getCircularPosition(employee);
+        }
+    }
+    
+    getLinearPosition(employee) {
+        const sections = ['outsider', 'newcomer', 'explorer', 'practitioner', 'pro'];
+        const edgeSections = ['edge_of_newcomer', 'edge_of_explorer', 'edge_of_practitioner', 'edge_of_pro'];
+        
+        const sectionWidth = this.width / 5; // Divide into 5 sections
+        const baseY = this.height - 100; // Bottom line position
+        
+        let sectionIndex, x, levelEmployees, employeeIndex, stackHeight;
+        
+        if (edgeSections.includes(employee.engagement_level)) {
+            // Position edge people between sections
+            if (employee.engagement_level === 'edge_of_newcomer') {
+                x = sectionWidth * 1.5; // Between outsider and newcomer
+            } else if (employee.engagement_level === 'edge_of_explorer') {
+                x = sectionWidth * 2.5; // Between newcomer and explorer
+            } else if (employee.engagement_level === 'edge_of_practitioner') {
+                x = sectionWidth * 3.5; // Between explorer and practitioner
+            } else if (employee.engagement_level === 'edge_of_pro') {
+                x = sectionWidth * 4.5; // Between practitioner and pro
+            }
+            
+            levelEmployees = employees.filter(e => e.engagement_level === employee.engagement_level);
+            employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+            stackHeight = Math.floor(employeeIndex / 3); // 3 per row
+            const rowPosition = employeeIndex % 3;
+            
+            return {
+                x: x + (rowPosition - 1) * 25, // Spread horizontally
+                y: baseY - (stackHeight * 25) - 50
+            };
+        } else {
+            // Position within sections
+            sectionIndex = sections.indexOf(employee.engagement_level);
+            x = sectionWidth * sectionIndex + sectionWidth / 2;
+            
+            levelEmployees = employees.filter(e => e.engagement_level === employee.engagement_level);
+            employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+            
+            const employeesPerRow = Math.ceil(Math.sqrt(levelEmployees.length));
+            const row = Math.floor(employeeIndex / employeesPerRow);
+            const col = employeeIndex % employeesPerRow;
+            
+            const offsetX = (col - (employeesPerRow - 1) / 2) * 20;
+            const offsetY = row * 25;
+            
+            return {
+                x: x + offsetX,
+                y: baseY - offsetY - 50
+            };
+        }
+    }
+    
+    getCircularPosition(employee) {
+        let radius, levelEmployees, employeeIndex, angleStep, angle;
+        
+        switch (employee.engagement_level) {
+            case 'outsider':
+                // Position outsiders in white space outside all rings
+                levelEmployees = employees.filter(e => e.engagement_level === 'outsider');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                radius = this.outsiderRadius;
+                break;
+                
+            case 'edge_of_newcomer':
+                // Position on the boundary of newcomer ring (outer edge)
+                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_newcomer');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                radius = circleConfig.newcomer.radius;
+                break;
+                
+            case 'newcomer':
+                // Position within the newcomer ring
+                levelEmployees = employees.filter(e => e.engagement_level === 'newcomer');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                const newcomerMin = circleConfig.explorer.radius + 10;
+                const newcomerMax = circleConfig.newcomer.radius - 10;
+                radius = newcomerMin + Math.random() * (newcomerMax - newcomerMin);
+                break;
+                
+            case 'edge_of_explorer':
+                // Position on the boundary between explorer and newcomer
+                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_explorer');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                radius = circleConfig.explorer.radius;
+                break;
+                
+            case 'explorer':
+                // Position within the explorer ring
+                levelEmployees = employees.filter(e => e.engagement_level === 'explorer');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                const explorerMin = circleConfig.practitioner.radius + 10;
+                const explorerMax = circleConfig.explorer.radius - 10;
+                radius = explorerMin + Math.random() * (explorerMax - explorerMin);
+                break;
+                
+            case 'edge_of_practitioner':
+                // Position on the boundary between practitioner and explorer
+                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_practitioner');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                radius = circleConfig.practitioner.radius;
+                break;
+                
+            case 'practitioner':
+                // Position within the practitioner ring
+                levelEmployees = employees.filter(e => e.engagement_level === 'practitioner');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                const practitionerMin = circleConfig.pro.radius + 10;
+                const practitionerMax = circleConfig.practitioner.radius - 10;
+                radius = practitionerMin + Math.random() * (practitionerMax - practitionerMin);
+                break;
+                
+            case 'edge_of_pro':
+                // Position on the boundary between pro and practitioner
+                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_pro');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                radius = circleConfig.pro.radius;
+                break;
+                
+            case 'pro':
+                // Position within the pro ring (center)
+                levelEmployees = employees.filter(e => e.engagement_level === 'pro');
+                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
+                angleStep = (2 * Math.PI) / levelEmployees.length;
+                angle = employeeIndex * angleStep;
+                const proMin = 20; // Close to center
+                const proMax = circleConfig.pro.radius - 10;
+                radius = proMin + Math.random() * (proMax - proMin);
+                break;
+                
+            default:
+                radius = this.outsiderRadius;
+                angle = Math.random() * 2 * Math.PI;
+        }
+        
+        const x = this.centerX + Math.cos(angle) * radius;
+        const y = this.centerY + Math.sin(angle) * radius;
+        
+        return { x, y };
+    }
+    
+    getEmployeeRadius(employee) {
+        return 12; // Standard size with padding for letters
+    }
+    
+    getEmployeeColor(employee) {
+        const levelColors = {
+            'outsider': '#9CA3AF',
+            'edge_of_newcomer': '#D97706',
+            'newcomer': '#EAB308',
+            'edge_of_explorer': '#16A34A', 
+            'explorer': '#22C55E',
+            'edge_of_practitioner': '#0891B2',
+            'practitioner': '#06B6D4',
+            'edge_of_pro': '#2563EB',
+            'pro': '#6366F1'
+        };
+        
+        return levelColors[employee.engagement_level] || '#9CA3AF';
+    }
+    
+    getInitials(name) {
+        return name.split(' ').map(n => n[0]).join('');
+    }
+    
+    showTooltip(event, employee) {
+        const lastUsage = employee.last_ai_usage ? 
+            new Date(employee.last_ai_usage).toLocaleDateString() : 'Never';
+        
+        this.tooltip
+            .style("opacity", 1)
+            .html(`
+                <strong>${employee.name}</strong><br/>
+                ${employee.title}<br/>
+                AI Level: ${employee.engagement_level.replace(/_/g, ' ')}<br/>
+                Last AI Usage: ${lastUsage}<br/>
+                AI Tools: ${employee.ai_tools_used.length > 0 ? employee.ai_tools_used.join(', ') : 'None'}
+            `)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 10) + "px");
+    }
+    
+    hideTooltip() {
+        this.tooltip.style("opacity", 0);
+    }
+    
+    showEmployeeInfo(employee) {
+        const infoPanel = d3.select("#employee-info");
+        const lastUsage = employee.last_ai_usage ? 
+            new Date(employee.last_ai_usage).toLocaleDateString() : 'Never';
+        const certificationStatus = this.getCertificationStatus(employee);
+        
+        infoPanel.html(`
+            <h3>${employee.name}</h3>
+            <p><strong>ID:</strong> ${employee.employee_id}</p>
+            <p><strong>Email:</strong> ${employee.email}</p>
+            <p><strong>Title:</strong> ${employee.title}</p>
+            <p><strong>Organization:</strong> ${employee.org_level_1} > ${employee.org_level_2}</p>
+            <p><strong>Location:</strong> ${employee.city}, ${employee.state}, ${employee.country}</p>
+            <hr>
+            <p><strong>AI Engagement Level:</strong> ${employee.engagement_level.replace(/_/g, ' ').toUpperCase()}</p>
+            <p><strong>Last AI Usage:</strong> ${lastUsage}</p>
+            <p><strong>Weeks Used (Past 4):</strong> ${employee.weeks_used_in_past_4}/4</p>
+            <p><strong>Consecutive Weeks:</strong> ${employee.consecutive_weeks_used}</p>
+            <p><strong>AI Tools Used:</strong> ${employee.ai_tools_used.length > 0 ? employee.ai_tools_used.join(', ') : 'None'}</p>
+            <p><strong>Certification:</strong> ${certificationStatus}</p>
+            <p><strong>Tenure:</strong> ${employee.tenure} years</p>
+        `);
+    }
+
+    getCertificationStatus(employee) {
+        if (employee.is_pro_certified) return 'Pro Certified';
+        if (employee.is_in_pro_program) return 'In Pro Program';
+        if (employee.is_practitioner_certified) return 'Practitioner Certified';
+        if (employee.is_in_practitioner_program) return 'In Practitioner Program';
+        return 'None';
+    }
+}
+
+// Initialize the visualization when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    new CommunityVisualization('#circles-svg');
+});

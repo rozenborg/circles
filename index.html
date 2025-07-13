@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community of Practice - Concentric Circles</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Community of Practice Visualization</h1>
+        <div id="visualization-container">
+            <div class="toggle-container">
+                <div class="toggle-icon-wrapper">
+                    <svg class="view-icon circle-icon" width="20" height="20" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/>
+                        <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="1" fill="none"/>
+                        <circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1" fill="none"/>
+                    </svg>
+                </div>
+                <div class="toggle-switch" id="view-toggle">
+                    <div class="toggle-slider"></div>
+                </div>
+                <div class="toggle-icon-wrapper">
+                    <svg class="view-icon line-icon" width="20" height="20" viewBox="0 0 24 24">
+                        <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="7" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="17" cy="12" r="2" fill="currentColor"/>
+                    </svg>
+                </div>
+            </div>
+            <svg id="circles-svg" width="800" height="800"></svg>
+        </div>
+        <div id="employee-info" class="info-panel">
+            <h3>Employee Details</h3>
+            <p>Hover over an employee to see details</p>
+        </div>
+    </div>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="database.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
