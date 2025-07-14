@@ -2,18 +2,30 @@
 const employeeDB = new EmployeeDatabase();
 const employees = employeeDB.getAllEmployees();
 
-// How wide is one dial step? = 2/3rds of the inner circle diameter
-const INNER_RADIUS = 120;         // Practitioner radius (larger to fill container)
-const DIAL = (INNER_RADIUS * 2) * (2/3);  // 160 px (2/3rds of inner diameter)
+// ---------------- Grid-based layout ----------------
+const GRID_DIVISIONS = 4;                            // 4×4 grid
+const SVG_SIZE      = 900;                           // width & height (px)
+const CELL          = SVG_SIZE / GRID_DIVISIONS;     // 225px per cell
 
-// Radii grow by one DIAL each time - simplified to 3 levels
+// Ring radii align to grid lines (1, 2, 3 cells from centre)
 const circleConfig = {
-    practitioner: { radius: INNER_RADIUS,            color: "#8B5CF6", label: "Practitioner" }, // Purple
-    explorer:     { radius: INNER_RADIUS + 1*DIAL,   color: "#6366F1", label: "Explorer" },     // Blueish purple  
-    newcomer:     { radius: INNER_RADIUS + 2*DIAL,   color: "#3B82F6", label: "Newcomer" }      // Blue
+    practitioner: { radius: 1 * CELL, color: "#8B5CF6", label: "Practitioner" },
+    explorer:     { radius: 2 * CELL, color: "#6366F1", label: "Explorer"     },
+    newcomer:     { radius: 3 * CELL, color: "#3B82F6", label: "Newcomer"     }
 };
 
-const OUTSIDER_RADIUS = INNER_RADIUS + 2*DIAL + 40; // perfect distance from newcomer ring
+// Outsider ring sits outside the 4x4 grid
+const OUTSIDER_RADIUS = 4.2 * CELL;       // More space for two bands
+// ----------------------------------------------------
+
+// Quarter-bullseye constants
+const PADDING = 80;              // breathing room left + bottom
+const BAND_OFFSET = 12;          // radial gap between outer & inner rows
+
+// place the quarter-circle in the TOP-LEFT of the canvas
+const ANGLE_START = Math.PI / 2;   // 90 °  (straight up)
+const ANGLE_END   = Math.PI;       // 180 ° (straight left)
+const ANGLE_RANGE = ANGLE_END - ANGLE_START;   // still a π/2 span
 
 function getRingArray() {
     // order from outermost to innermost for proper layering
@@ -24,10 +36,10 @@ function getRingArray() {
 class CommunityVisualization {
     constructor(containerId) {
         this.container = d3.select(containerId);
-        this.width = 900;
-        this.height = 900;
-        this.centerX = this.width / 2;
-        this.centerY = this.height / 2;
+        this.width = SVG_SIZE;
+        this.height = CELL * 5;   // extra row for labels
+        this.centerX = this.width;   // grid cell 4 * CELL
+        this.centerY = CELL * 4;     // Bottom of 4x4 grid (not including label row)
         this.outsiderRadius = OUTSIDER_RADIUS; // Area outside all rings for outsiders
         this.isLinearView = false;
         this.showPhotos = false; // true = photos, false = colored dots
@@ -43,6 +55,8 @@ class CommunityVisualization {
         this.svg = this.container
             .attr("width", this.width)
             .attr("height", this.height);
+            
+        // No longer need clipping path, we are drawing arcs directly
     }
     
     setupTooltip() {
@@ -191,7 +205,7 @@ class CommunityVisualization {
         const duration = 800;
         
         // Step 1: Immediately remove ALL background elements (ensure clean slate)
-        this.svg.selectAll(".circle-ring, .circle-label, .section-label, .linear-line").remove();
+        this.svg.selectAll(".circle-ring, .circle-label, .below-label, .section-label, .linear-line").remove();
         
         // Step 2: Calculate new positions
         employees.forEach(employee => {
@@ -238,31 +252,122 @@ class CommunityVisualization {
     }
     
     drawCircleRings() {
-        getRingArray().forEach(ring => {
-            this.svg.append("circle")
-                .attr("class", "circle-ring")
-                .attr("cx", this.centerX)
-                .attr("cy", this.centerY)
-                .attr("r", ring.radius)
-                .style("fill", this.filledRings ? ring.color : "none")
-                .style("stroke", this.filledRings ? "none" : ring.color)
-                .style("stroke-width", this.filledRings ? 0 : 3)
-                .style("opacity", this.filledRings ? 0.3 : 0.6)
-                .style("pointer-events", "none"); // Ensure rings don't interfere with employee interactions
+        // Simple quarter-circle arc drawing
+        getRingArray().forEach((ring, index, rings) => {
+            if (this.filledRings) {
+                // For filled rings, we need to draw a filled quarter-annulus
+                const innerRing = rings[index + 1];
+                const innerRadius = innerRing ? innerRing.radius : 0;
+                
+                // Build path for filled quarter-ring
+                const path = [];
+                
+                // Start at inner radius, 90 degrees
+                const innerStartX = this.centerX;
+                const innerStartY = this.centerY - innerRadius;
+                
+                // End at inner radius, 180 degrees  
+                const innerEndX = this.centerX - innerRadius;
+                const innerEndY = this.centerY;
+                
+                // Start at outer radius, 180 degrees
+                const outerStartX = this.centerX - ring.radius;
+                const outerStartY = this.centerY;
+                
+                // End at outer radius, 90 degrees
+                const outerEndX = this.centerX;
+                const outerEndY = this.centerY - ring.radius;
+                
+                if (innerRadius > 0) {
+                    path.push(`M ${innerStartX} ${innerStartY}`);
+                    path.push(`A ${innerRadius} ${innerRadius} 0 0 0 ${innerEndX} ${innerEndY}`);  // Changed from 1 to 0
+                    path.push(`L ${outerStartX} ${outerStartY}`);
+                } else {
+                    // For center ring, start from center
+                    path.push(`M ${this.centerX} ${this.centerY}`);
+                    path.push(`L ${outerStartX} ${outerStartY}`);
+                }
+                
+                path.push(`A ${ring.radius} ${ring.radius} 0 0 1 ${outerEndX} ${outerEndY}`);  // Changed from 0 to 1
+                path.push('Z'); // Close path
+                
+                this.svg.append("path")
+                    .attr("class", "circle-ring")
+                    .attr("d", path.join(' '))
+                    .style("fill", ring.color)
+                    .style("opacity", 0.3)
+                    .style("pointer-events", "none");
+            } else {
+                // For outline rings, just draw the arc
+                // Start point: 90 degrees (straight up)
+                const startX = this.centerX;
+                const startY = this.centerY - ring.radius;
+                
+                // End point: 180 degrees (straight left)
+                const endX = this.centerX - ring.radius;
+                const endY = this.centerY;
+                
+                const pathData = [
+                    `M ${startX} ${startY}`,
+                    `A ${ring.radius} ${ring.radius} 0 0 0 ${endX} ${endY}`  // Changed sweep-flag from 1 to 0
+                ].join(' ');
+                
+                this.svg.append("path")
+                    .attr("class", "circle-ring")
+                    .attr("d", pathData)
+                    .style("fill", "none")
+                    .style("stroke", ring.color)
+                    .style("stroke-width", 3)
+                    .style("opacity", 0.6)
+                    .style("pointer-events", "none");
+            }
         });
     }
     
     drawCircleLabels() {
-        Object.entries(circleConfig).forEach(([level, config]) => {
+        // Only draw the labels below the bullseye, not on the arcs
+        this.drawBelowLabels();
+    }
+    
+    drawBelowLabels() {
+        const labelY = CELL * 4.3;  // just below rings, within row 5
+        // Order from outermost ring to innermost for proper left-to-right layout
+        const levels = ['outsider', 'newcomer', 'explorer', 'practitioner'];
+
+        levels.forEach((level) => {
+            // Count employees at this level (including edge variants)
+            let count = 0;
+            if (level === 'outsider') {
+                count = employees.filter(e => e.engagement_level === 'outsider' || e.engagement_level === 'edge_of_newcomer').length;
+            } else if (level === 'newcomer') {
+                count = employees.filter(e => e.engagement_level === 'newcomer' || e.engagement_level === 'edge_of_explorer').length;
+            } else if (level === 'explorer') {
+                count = employees.filter(e => e.engagement_level === 'explorer' || e.engagement_level === 'edge_of_practitioner').length;
+            } else {
+                count = employees.filter(e => e.engagement_level === level).length;
+            }
+
+            // Determine corresponding radius for x-alignment
+            let ringRadius;
+            if (level === 'outsider') {
+                ringRadius = this.outsiderRadius;
+            } else {
+                ringRadius = circleConfig[level].radius;
+            }
+            // Position each label in the center of its grid column
+            const labelX = (levels.indexOf(level) + 0.5) * CELL;
+
+            const labelConfig = circleConfig[level] || { label: 'Outsider', color: '#9CA3AF' };
+
             this.svg.append("text")
-                .attr("class", "circle-label")
-                .attr("x", this.centerX)
-                .attr("y", this.centerY - config.radius + 25)
+                .attr("class", "below-label")
+                .attr("x", labelX)
+                .attr("y", labelY)
                 .attr("text-anchor", "middle")
-                .text(config.label)
-                .style("fill", "#374151")
+                .text(`${labelConfig.label}: ${count}`)
+                .style("fill", labelConfig.color)
                 .style("font-weight", "bold")
-                .style("font-size", "18px");
+                .style("font-size", "14px");
         });
     }
     
@@ -407,87 +512,101 @@ class CommunityVisualization {
     }
     
     getCircularPosition(employee) {
-        let radius, levelEmployees, employeeIndex, angleStep, angle;
-        
+        // Determine ring and edge status
+        let ringKey, isEdge;
         switch (employee.engagement_level) {
             case 'outsider':
-                // Position outsiders in white space outside all rings
-                levelEmployees = employees.filter(e => e.engagement_level === 'outsider');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                radius = this.outsiderRadius;
+                ringKey = 'outsider';
+                isEdge = false;
                 break;
-                
             case 'edge_of_newcomer':
-                // Position on the boundary of newcomer ring (outer edge)
-                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_newcomer');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                radius = circleConfig.newcomer.radius;
+                ringKey = 'outsider';
+                isEdge = true;
                 break;
-                
             case 'newcomer':
-                // Position within the newcomer ring
-                levelEmployees = employees.filter(e => e.engagement_level === 'newcomer');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                const newcomerMin = circleConfig.explorer.radius + 10;
-                const newcomerMax = circleConfig.newcomer.radius - 10;
-                radius = newcomerMin + Math.random() * (newcomerMax - newcomerMin);
+                ringKey = 'newcomer';
+                isEdge = false;
                 break;
-                
             case 'edge_of_explorer':
-                // Position on the boundary between explorer and newcomer
-                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_explorer');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                radius = circleConfig.explorer.radius;
+                ringKey = 'newcomer';
+                isEdge = true;
                 break;
-                
             case 'explorer':
-                // Position within the explorer ring
-                levelEmployees = employees.filter(e => e.engagement_level === 'explorer');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                const explorerMin = circleConfig.practitioner.radius + 10;
-                const explorerMax = circleConfig.explorer.radius - 10;
-                radius = explorerMin + Math.random() * (explorerMax - explorerMin);
+                ringKey = 'explorer';
+                isEdge = false;
                 break;
-                
             case 'edge_of_practitioner':
-                // Position on the boundary between practitioner and explorer
-                levelEmployees = employees.filter(e => e.engagement_level === 'edge_of_practitioner');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                radius = circleConfig.practitioner.radius;
+                ringKey = 'explorer';
+                isEdge = true;
                 break;
-                
             case 'practitioner':
-                // Position within the practitioner ring (center)
-                levelEmployees = employees.filter(e => e.engagement_level === 'practitioner');
-                employeeIndex = levelEmployees.findIndex(e => e.employee_id === employee.employee_id);
-                angleStep = (2 * Math.PI) / levelEmployees.length;
-                angle = employeeIndex * angleStep;
-                const practitionerMin = 20; // Close to center
-                const practitionerMax = circleConfig.practitioner.radius - 10;
-                radius = practitionerMin + Math.random() * (practitionerMax - practitionerMin);
-                break;
-                
-                
             default:
-                radius = this.outsiderRadius;
-                angle = Math.random() * 2 * Math.PI;
+                ringKey = 'practitioner';
+                isEdge = false;
         }
+
+        const getBandRadii = (key) => {
+            // Helper to compute nicely spaced bands between two boundaries
+            const calcBands = (innerB, outerB) => {
+                const thickness = outerB - innerB;
+                const innerBand = innerB + thickness * 0.35; // 35% in from inner boundary
+                const outerBand = innerB + thickness * 0.7;  // 70% in from inner boundary
+                return { inner: innerBand, outer: outerBand };
+            };
+
+            if (key === 'outsider') {
+                return calcBands(circleConfig.newcomer.radius, this.outsiderRadius);
+            }
+            if (key === 'newcomer') {
+                return calcBands(circleConfig.explorer.radius, circleConfig.newcomer.radius);
+            }
+            if (key === 'explorer') {
+                return calcBands(circleConfig.practitioner.radius, circleConfig.explorer.radius);
+            }
+            // practitioner ring (center)
+            const innerBoundary = 0.3 * CELL; // Start further from center for better spacing
+            const outerBoundary = circleConfig.practitioner.radius; // Ends at 1st grid line
+            return calcBands(innerBoundary, outerBoundary);
+        };
+
+        const { outer, inner } = getBandRadii(ringKey);
+        let radius;
         
+        if (ringKey === 'practitioner') {
+            // For practitioners, alternate between inner and outer bands since there are no edge practitioners
+            const practitionerEmployees = employees.filter(e => e.engagement_level === 'practitioner');
+            const employeeIndex = practitionerEmployees.findIndex(e => e.employee_id === employee.employee_id);
+            radius = (employeeIndex % 2 === 0) ? outer : inner;
+        } else {
+            radius = isEdge ? inner : outer;
+        }
+
+        // Angle distribution: use employees of same ringKey and same isEdge?
+        let ringEmployees;
+        if (ringKey === 'practitioner') {
+            // For practitioners, use all practitioners since we're alternating bands artificially
+            ringEmployees = employees.filter(e => e.engagement_level === 'practitioner');
+        } else {
+            ringEmployees = employees.filter(e => {
+                const mapping = {
+                    outsider: ['outsider', 'edge_of_newcomer'],
+                    newcomer: ['newcomer', 'edge_of_explorer'],
+                    explorer: ['explorer', 'edge_of_practitioner'],
+                    practitioner: ['practitioner']
+                };
+                return mapping[ringKey].includes(e.engagement_level) &&
+                       ((isEdge && e.engagement_level.includes('edge')) || (!isEdge && !e.engagement_level.includes('edge')));
+            });
+        }
+
+        const employeeIndex = ringEmployees.findIndex(e => e.employee_id === employee.employee_id);
+        const employeeCount = ringEmployees.length;
+
+        const angleStep = (Math.PI / 2) / Math.max(employeeCount, 1);
+        const angle = (Math.PI / 2) + angleStep * employeeIndex;
+
         const x = this.centerX + Math.cos(angle) * radius;
-        const y = this.centerY + Math.sin(angle) * radius;
-        
+        const y = this.centerY - Math.sin(angle) * radius;
         return { x, y };
     }
     
